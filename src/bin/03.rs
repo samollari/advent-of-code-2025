@@ -1,8 +1,6 @@
 advent_of_code::solution!(3);
 
-use std::collections::VecDeque;
-
-use itertools::{self, Itertools};
+use itertools::Itertools;
 
 fn parse_input(input: &str) -> Vec<Vec<u8>> {
     input
@@ -18,19 +16,19 @@ fn parse_input(input: &str) -> Vec<Vec<u8>> {
 }
 
 fn find_max_joltage<const BATTERIES: usize>(bank: &Vec<u8>) -> u64 {
-    let mut digits = VecDeque::from([0u8; BATTERIES]);
+    let mut digits = vec![0u8; BATTERIES];
 
     for digit in bank {
         assert!(*digit < 10);
         let found = digits
             .iter()
-            .chain(vec![digit])
+            .chain([digit])
             .tuple_windows()
             .find_position(|(high, low)| low > high);
         match found {
             Some((drop_index, _)) => {
-                digits.remove(drop_index).unwrap();
-                digits.push_back(*digit);
+                digits.remove(drop_index);
+                digits.push(*digit);
             }
             None => {}
         }
