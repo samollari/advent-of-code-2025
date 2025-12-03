@@ -1,5 +1,9 @@
 advent_of_code::solution!(3);
 
+use std::collections::VecDeque;
+
+use itertools::{self, Itertools};
+
 fn parse_input(input: &str) -> Vec<Vec<u8>> {
     input
         .trim()
@@ -13,34 +17,34 @@ fn parse_input(input: &str) -> Vec<Vec<u8>> {
         .collect()
 }
 
-pub fn part_one(input: &str) -> Option<u64> {
-    let banks = parse_input(input);
+fn find_max_joltage<const BATTERIES: usize>(bank: &Vec<u8>) -> u64 {
+    let mut digits = VecDeque::from([0u8; BATTERIES]);
 
-    Some(
-        banks
+    for digit in bank {
+        assert!(*digit < 10);
+        let found = digits
             .iter()
-            .map(|bank| {
-                let mut first_digit = 0;
-                let mut second_digit = 0;
-                for digit in bank {
-                    if second_digit > first_digit {
-                        first_digit = second_digit;
-                        second_digit = *digit;
-                    } else if *digit > second_digit {
-                        second_digit = *digit;
-                    }
-                }
-                assert!(first_digit < 10);
-                assert!(second_digit < 10);
+            .chain(vec![digit])
+            .tuple_windows()
+            .find_position(|(high, low)| low > high);
+        match found {
+            Some((drop_index, _)) => {
+                digits.remove(drop_index).unwrap();
+                digits.push_back(*digit);
+            }
+            None => {}
+        }
+    }
 
-                (first_digit * 10 + second_digit) as u64
-            })
-            .sum(),
-    )
+    digits.iter().fold(0, |acc, x| acc * 10 + *x as u64)
+}
+
+pub fn part_one(input: &str) -> Option<u64> {
+    Some(parse_input(input).iter().map(find_max_joltage::<2>).sum())
 }
 
 pub fn part_two(input: &str) -> Option<u64> {
-    None
+    Some(parse_input(input).iter().map(find_max_joltage::<12>).sum())
 }
 
 #[cfg(test)]
@@ -56,6 +60,6 @@ mod tests {
     #[test]
     fn test_part_two() {
         let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+        assert_eq!(result, Some(3121910778619));
     }
 }
