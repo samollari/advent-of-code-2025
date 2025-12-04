@@ -64,25 +64,53 @@ fn get_neighbors((x, y): BasicCoord, (width, height): BasicCoord) -> Vec<BasicCo
     neighbors
 }
 
+fn find_accessible_rolls(
+    rolls: &HashSet<BasicCoord>,
+    dimensions: BasicCoord,
+) -> impl Iterator<Item = BasicCoord> {
+    rolls
+        .iter()
+        .filter(move |coord| {
+            get_neighbors(**coord, dimensions)
+                .iter()
+                .filter(|neighbor_coord| rolls.contains(neighbor_coord))
+                .count()
+                < 4
+        })
+        .map(|coord| *coord)
+}
+
+fn rm_count_accessible_rolls(rolls: &mut HashSet<BasicCoord>, dimensions: BasicCoord) -> usize {
+    let accessible_rolls = find_accessible_rolls(rolls, dimensions).collect_vec();
+
+    for coord in &accessible_rolls {
+        rolls.remove(coord);
+    }
+
+    accessible_rolls.len()
+}
+
 pub fn part_one(input: &str) -> Option<u64> {
     let (rolls, dimensions) = parse_input(input);
 
-    Some(
-        rolls
-            .iter()
-            .filter(|coord| {
-                get_neighbors(**coord, dimensions)
-                    .iter()
-                    .filter(|neighbor_coord| rolls.contains(neighbor_coord))
-                    .count()
-                    < 4
-            })
-            .count() as u64,
-    )
+    Some(find_accessible_rolls(&rolls, dimensions).count() as u64)
 }
 
 pub fn part_two(input: &str) -> Option<u64> {
-    None
+    let (mut rolls, dimensions) = parse_input(input);
+
+    let mut removed = 0;
+
+    loop {
+        let removed_this_round = rm_count_accessible_rolls(&mut rolls, dimensions);
+        removed += removed_this_round;
+
+        if removed_this_round == 0 {
+            break;
+        }
+    }
+
+    Some(removed as u64)
 }
 
 #[cfg(test)]
@@ -98,6 +126,6 @@ mod tests {
     #[test]
     fn test_part_two() {
         let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+        assert_eq!(result, Some(43));
     }
 }
