@@ -1,6 +1,4 @@
-use std::collections::HashSet;
-
-use itertools::Itertools;
+use std::{collections::HashSet, hash::RandomState};
 
 advent_of_code::solution!(4);
 
@@ -64,30 +62,46 @@ fn get_neighbors((x, y): BasicCoord, (width, height): BasicCoord) -> Vec<BasicCo
     neighbors
 }
 
+fn roll_accessible(coord: BasicCoord, rolls: &HashSet<BasicCoord>, dimensions: BasicCoord) -> bool {
+    get_neighbors(coord, dimensions)
+        .iter()
+        .filter(|neighbor_coord| rolls.contains(neighbor_coord))
+        .count()
+        < 4
+}
+
 fn find_accessible_rolls(
     rolls: &HashSet<BasicCoord>,
     dimensions: BasicCoord,
 ) -> impl Iterator<Item = BasicCoord> {
     rolls
         .iter()
-        .filter(move |coord| {
-            get_neighbors(**coord, dimensions)
-                .iter()
-                .filter(|neighbor_coord| rolls.contains(neighbor_coord))
-                .count()
-                < 4
-        })
+        .filter(move |coord| roll_accessible(**coord, rolls, dimensions))
         .map(|coord| *coord)
 }
 
-fn rm_count_accessible_rolls(rolls: &mut HashSet<BasicCoord>, dimensions: BasicCoord) -> usize {
-    let accessible_rolls = find_accessible_rolls(rolls, dimensions).collect_vec();
+fn find_rolls_to_remove(
+    rolls: &HashSet<BasicCoord>,
+    dimensions: BasicCoord,
+    removed_last_round: &Option<Vec<BasicCoord>>,
+) -> Vec<BasicCoord> {
+    match removed_last_round {
+        Some(last_removed) => {
+            let neighbors_to_check: HashSet<_, RandomState> = HashSet::from_iter(
+                last_removed
+                    .iter()
+                    .flat_map(|coord| get_neighbors(*coord, dimensions))
+                    .filter(|coord| rolls.contains(coord)),
+            );
 
-    for coord in &accessible_rolls {
-        rolls.remove(coord);
+            neighbors_to_check
+                .iter()
+                .filter(|coord| roll_accessible(**coord, rolls, dimensions))
+                .map(|coord| *coord)
+                .collect()
+        }
+        None => find_accessible_rolls(rolls, dimensions).collect(),
     }
-
-    accessible_rolls.len()
 }
 
 pub fn part_one(input: &str) -> Option<u64> {
@@ -99,18 +113,26 @@ pub fn part_one(input: &str) -> Option<u64> {
 pub fn part_two(input: &str) -> Option<u64> {
     let (mut rolls, dimensions) = parse_input(input);
 
-    let mut removed = 0;
+    let mut total_removed = 0;
+    let mut removed_last_round: Option<Vec<_>> = None;
 
     loop {
-        let removed_this_round = rm_count_accessible_rolls(&mut rolls, dimensions);
-        removed += removed_this_round;
+        let removed_this_round = find_rolls_to_remove(&rolls, dimensions, &removed_last_round);
+        for coord in &removed_this_round {
+            rolls.remove(coord);
+        }
 
-        if removed_this_round == 0 {
+        let removed_count = removed_this_round.len();
+        total_removed += removed_count;
+
+        removed_last_round = Some(removed_this_round);
+
+        if removed_count == 0 {
             break;
         }
     }
 
-    Some(removed as u64)
+    Some(total_removed as u64)
 }
 
 #[cfg(test)]
