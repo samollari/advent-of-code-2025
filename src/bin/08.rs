@@ -25,56 +25,57 @@ fn parse_input(input: &str) -> Vec<Coord3D> {
         .collect()
 }
 
-fn get_pt1_ans(input: &str, num_connections: usize) -> Option<u64> {
-    let coords = parse_input(input);
-
-    let connections = coords
+fn get_sorted_connections(
+    coords: &Vec<Coord3D>,
+) -> impl Iterator<Item = ((Coord3D, Coord3D), usize)> {
+    coords
         .iter()
         .tuple_combinations()
-        .map(|els| {
-            let (a, b) = els;
+        .map(|(a, b)| {
             let (a_x, a_y, a_z) = a;
             let (b_x, b_y, b_z) = b;
 
             let dist = ((*a_x as isize - *b_x as isize).pow(2)
                 + (*a_y as isize - *b_y as isize).pow(2)
                 + (*a_z as isize - *b_z as isize).pow(2))
-            .isqrt();
+            .isqrt() as usize;
 
-            (els, dist)
+            ((*a, *b), dist)
         })
         .sorted_by(|(_, dist_a), (_, dist_b)| dist_a.cmp(dist_b))
-        .take(num_connections);
+}
 
-    let mut circuits: Vec<HashSet<&Coord3D>> = vec![];
+fn connect_to_circuits(
+    (a_coord, b_coord): &(Coord3D, Coord3D),
+    circuits: &mut Vec<HashSet<Coord3D>>,
+) {
+    let existing_a_circuit = circuits.iter().find_position(|set| set.contains(a_coord));
+    let existing_b_circuit = circuits.iter().find_position(|set| set.contains(b_coord));
 
-    for ((a_coord, b_coord), _length) in connections {
-        // println!(
-        //     "Checking connection between {:?}, {:?} (length {})",
-        //     a_coord, b_coord, _length
-        // );
-        let existing_a_circuit = circuits.iter().find_position(|set| set.contains(a_coord));
-        let existing_b_circuit = circuits.iter().find_position(|set| set.contains(b_coord));
+    let both_coords = [*a_coord, *b_coord];
 
-        let both_coords = [a_coord, b_coord];
-
-        match (existing_a_circuit, existing_b_circuit) {
-            (None, None) => circuits.push(HashSet::from(both_coords)),
-            (None, Some((idx, _))) | (Some((idx, _)), None) => circuits[idx].extend(both_coords),
-            (Some((a_idx, _)), Some((b_idx, b_set))) => {
-                if a_idx != b_idx {
-                    let b_set = b_set.clone();
-                    circuits[a_idx].extend(b_set);
-                    circuits[a_idx].extend(both_coords);
-                    circuits.swap_remove(b_idx);
-                }
+    match (existing_a_circuit, existing_b_circuit) {
+        (None, None) => circuits.push(HashSet::from(both_coords)),
+        (None, Some((idx, _))) | (Some((idx, _)), None) => circuits[idx].extend(both_coords),
+        (Some((a_idx, _)), Some((b_idx, b_set))) => {
+            if a_idx != b_idx {
+                let b_set = b_set.clone();
+                circuits[a_idx].extend(b_set);
+                circuits[a_idx].extend(both_coords);
+                circuits.swap_remove(b_idx);
             }
         }
-        // println!(
-        //     "\t{} circuits: {:?}",
-        //     circuits.len(),
-        //     circuits.iter().map(|set| set.len()).collect_vec()
-        // )
+    }
+}
+
+fn get_pt1_ans(input: &str, num_connections: usize) -> Option<u64> {
+    let coords = parse_input(input);
+    let connections = get_sorted_connections(&coords).take(num_connections);
+
+    let mut circuits: Vec<HashSet<Coord3D>> = vec![];
+
+    for (points, _) in connections {
+        connect_to_circuits(&points, &mut circuits);
     }
 
     Some(
@@ -94,49 +95,16 @@ pub fn part_one(input: &str) -> Option<u64> {
 
 pub fn part_two(input: &str) -> Option<u64> {
     let coords = parse_input(input);
+    let connections = get_sorted_connections(&coords);
 
-    let connections = coords
-        .iter()
-        .tuple_combinations()
-        .map(|els| {
-            let (a, b) = els;
-            let (a_x, a_y, a_z) = a;
-            let (b_x, b_y, b_z) = b;
+    let mut circuits: Vec<HashSet<Coord3D>> = vec![];
+    let mut last_connected_coords: Option<(Coord3D, Coord3D)> = None;
 
-            let dist = ((*a_x as isize - *b_x as isize).pow(2)
-                + (*a_y as isize - *b_y as isize).pow(2)
-                + (*a_z as isize - *b_z as isize).pow(2))
-            .isqrt();
-
-            (els, dist)
-        })
-        .sorted_by(|(_, dist_a), (_, dist_b)| dist_a.cmp(dist_b));
-
-    let mut circuits: Vec<HashSet<&Coord3D>> = vec![];
-
-    let mut last_connected_coords: Option<(&Coord3D, &Coord3D)> = None;
-
-    for ((a_coord, b_coord), _length) in connections {
-        let existing_a_circuit = circuits.iter().find_position(|set| set.contains(a_coord));
-        let existing_b_circuit = circuits.iter().find_position(|set| set.contains(b_coord));
-
-        let both_coords = [a_coord, b_coord];
-
-        match (existing_a_circuit, existing_b_circuit) {
-            (None, None) => circuits.push(HashSet::from(both_coords)),
-            (None, Some((idx, _))) | (Some((idx, _)), None) => circuits[idx].extend(both_coords),
-            (Some((a_idx, _)), Some((b_idx, b_set))) => {
-                if a_idx != b_idx {
-                    let b_set = b_set.clone();
-                    circuits[a_idx].extend(b_set);
-                    circuits[a_idx].extend(both_coords);
-                    circuits.swap_remove(b_idx);
-                }
-            }
-        }
+    for (points, _) in connections {
+        connect_to_circuits(&points, &mut circuits);
 
         if circuits.len() == 1 && circuits[0].len() == coords.len() {
-            last_connected_coords = Some((a_coord, b_coord));
+            last_connected_coords = Some(points);
             break;
         }
     }
