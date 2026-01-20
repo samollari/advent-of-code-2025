@@ -43,11 +43,11 @@ fn parse_input(input: &str) -> Graph {
 enum ProcessingState {
     NotStarted,
     InProgress,
-    Done(u64),
+    Done(Vec<Vec<String>>),
 }
 
-pub fn part_one(input: &str) -> Option<u64> {
-    let graph = parse_input(input);
+fn get_graph_routes(graph: Graph, start_node: &str) -> Option<Vec<Vec<String>>> {
+    let start_node_string = start_node.to_owned();
 
     let mut processing_states: HashMap<String, ProcessingState, RandomState> = HashMap::from_iter(
         graph
@@ -55,10 +55,13 @@ pub fn part_one(input: &str) -> Option<u64> {
             .keys()
             .map(|node| (node.clone(), ProcessingState::NotStarted)),
     );
-    processing_states.insert("out".to_owned(), ProcessingState::Done(1));
+    processing_states.insert(
+        "out".to_owned(),
+        ProcessingState::Done(vec![vec!["out".to_owned()]]),
+    );
 
     let mut process_queue: VecDeque<String> = VecDeque::new();
-    process_queue.push_back("you".to_owned());
+    process_queue.push_back(start_node_string.clone());
 
     loop {
         // println!("{:?}, {:?}", process_queue, processing_states);
@@ -68,13 +71,25 @@ pub fn part_one(input: &str) -> Option<u64> {
                     ProcessingState::NotStarted | ProcessingState::InProgress => {
                         let node_children = graph.outputs.get(&node_to_process).unwrap();
 
-                        let all_done_result =
-                            node_children.iter().fold(Some(0), |acc, child| {
-                                match (acc, processing_states.get(child)) {
-                                    (Some(acc), Some(ProcessingState::Done(x))) => Some(acc + x),
-                                    _ => None,
-                                }
-                            });
+                        let childs_paths = node_children
+                            .iter()
+                            .filter_map(|child| match processing_states.get(child) {
+                                Some(ProcessingState::Done(paths)) => Some(
+                                    paths
+                                        .iter()
+                                        .map(|path| {
+                                            let mut path = path.clone();
+                                            path.insert(0, node_to_process.clone());
+                                            path
+                                        })
+                                        .collect_vec(),
+                                ),
+                                _ => None,
+                            })
+                            .collect_vec();
+
+                        let all_done_result = (childs_paths.len() == node_children.len())
+                            .then(|| childs_paths.into_iter().flatten().collect_vec());
 
                         let my_new_state = match all_done_result {
                             Some(paths) => {
@@ -97,36 +112,66 @@ pub fn part_one(input: &str) -> Option<u64> {
 
                         processing_states.insert(node_to_process.clone(), my_new_state.clone());
 
-                        match (node_to_process == "you".to_owned(), my_new_state) {
+                        match (node_to_process == start_node_string, my_new_state) {
                             (true, ProcessingState::Done(_)) => break,
                             _ => {}
                         };
                     }
                     ProcessingState::Done(_) => {
-                        if node_to_process == "you".to_owned() {
+                        if node_to_process == start_node_string {
                             break;
                         }
                     }
                 },
-                None => panic!("Node was queued that doesn't exist!"),
+                None => {
+                    println!("{} queued but doesn't exist!", node_to_process);
+                    panic!("Node was queued that doesn't exist!")
+                }
             },
             None => break,
         }
     }
 
-    let final_result = processing_states.get("you");
+    let final_result = processing_states.get(start_node);
 
     assert!(matches!(final_result, Some(ProcessingState::Done(_))));
 
     match final_result {
-        Some(ProcessingState::Done(paths)) => Some(*paths),
+        Some(ProcessingState::Done(paths)) => Some(paths.to_owned()),
         _ => None,
     }
 }
 
-pub fn part_two(input: &str) -> Option<u64> {
-    None
+pub fn part_one(input: &str) -> Option<u64> {
+    get_graph_routes(parse_input(input), "you").map(|paths| paths.len() as u64)
 }
+
+pub fn part_two(input: &str) -> Option<u64> {
+    let fft_string = "fft".to_owned();
+    let dac_string = "dac".to_owned();
+
+    get_graph_routes(parse_input(input), "svr").map(|paths| {
+        paths
+            .iter()
+            .filter(|path| path.contains(&fft_string) && path.contains(&dac_string))
+            .count() as u64
+    })
+}
+
+const EXAMPLE_2: &str = "svr: aaa bbb
+aaa: fft
+fft: ccc
+bbb: tty
+tty: ccc
+ccc: ddd eee
+ddd: hub
+hub: fff
+eee: dac
+dac: fff
+fff: ggg hhh
+ggg: out
+hhh: out
+";
 
 #[cfg(test)]
 mod tests {
@@ -140,7 +185,7 @@ mod tests {
 
     #[test]
     fn test_part_two() {
-        let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+        let result = part_two(EXAMPLE_2);
+        assert_eq!(result, Some(2));
     }
 }
