@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, VecDeque},
-    hash::RandomState,
+    iter::once,
 };
 
 use itertools::Itertools;
@@ -46,116 +46,40 @@ enum ProcessingState {
     Done(Vec<Vec<String>>),
 }
 
-fn get_graph_routes(graph: Graph, start_node: &str) -> Option<Vec<Vec<String>>> {
-    let start_node_string = start_node.to_owned();
-
-    let mut processing_states: HashMap<String, ProcessingState, RandomState> = HashMap::from_iter(
-        graph
-            .outputs
-            .keys()
-            .map(|node| (node.clone(), ProcessingState::NotStarted)),
-    );
-    processing_states.insert(
-        "out".to_owned(),
-        ProcessingState::Done(vec![vec!["out".to_owned()]]),
-    );
-
-    let mut process_queue: VecDeque<String> = VecDeque::new();
-    process_queue.push_back(start_node_string.clone());
-
-    loop {
-        // println!("{:?}, {:?}", process_queue, processing_states);
-        match process_queue.pop_front() {
-            Some(node_to_process) => match processing_states.get(&node_to_process) {
-                Some(state) => match state {
-                    ProcessingState::NotStarted | ProcessingState::InProgress => {
-                        let node_children = graph.outputs.get(&node_to_process).unwrap();
-
-                        let childs_paths = node_children
-                            .iter()
-                            .filter_map(|child| match processing_states.get(child) {
-                                Some(ProcessingState::Done(paths)) => Some(
-                                    paths
-                                        .iter()
-                                        .map(|path| {
-                                            let mut path = path.clone();
-                                            path.insert(0, node_to_process.clone());
-                                            path
-                                        })
-                                        .collect_vec(),
-                                ),
-                                _ => None,
-                            })
-                            .collect_vec();
-
-                        let all_done_result = (childs_paths.len() == node_children.len())
-                            .then(|| childs_paths.into_iter().flatten().collect_vec());
-
-                        let my_new_state = match all_done_result {
-                            Some(paths) => {
-                                let mut new_process_queue = VecDeque::from(
-                                    graph
-                                        .inputs
-                                        .get(&node_to_process)
-                                        .unwrap_or(&vec![])
-                                        .clone(),
-                                );
-                                new_process_queue.append(&mut process_queue);
-                                process_queue = new_process_queue;
-                                ProcessingState::Done(paths)
-                            }
-                            None => {
-                                process_queue.append(&mut VecDeque::from(node_children.clone()));
-                                ProcessingState::InProgress
-                            }
-                        };
-
-                        processing_states.insert(node_to_process.clone(), my_new_state.clone());
-
-                        match (node_to_process == start_node_string, my_new_state) {
-                            (true, ProcessingState::Done(_)) => break,
-                            _ => {}
-                        };
-                    }
-                    ProcessingState::Done(_) => {
-                        if node_to_process == start_node_string {
-                            break;
-                        }
-                    }
-                },
-                None => {
-                    println!("{} queued but doesn't exist!", node_to_process);
-                    panic!("Node was queued that doesn't exist!")
-                }
-            },
-            None => break,
-        }
+fn get_graph_routes<'a>(graph: &'a Graph, start_node: &String) -> Vec<VecDeque<String>> {
+    if *start_node == "out".to_string() {
+        return vec![VecDeque::from([start_node.clone()])];
     }
 
-    let final_result = processing_states.get(start_node);
+    let empty_list = vec![];
+    let children = graph.outputs.get(start_node).unwrap_or(&empty_list);
 
-    assert!(matches!(final_result, Some(ProcessingState::Done(_))));
-
-    match final_result {
-        Some(ProcessingState::Done(paths)) => Some(paths.to_owned()),
-        _ => None,
-    }
+    let _a = children
+        .iter()
+        .flat_map(|child| {
+            get_graph_routes(graph, child).into_iter().map(|mut path| {
+                path.push_front(start_node.clone());
+                path
+            })
+        })
+        .collect();
+    _a
 }
 
 pub fn part_one(input: &str) -> Option<u64> {
-    get_graph_routes(parse_input(input), "you").map(|paths| paths.len() as u64)
+    Some(get_graph_routes(&parse_input(input), &"you".to_string()).len() as u64)
 }
 
 pub fn part_two(input: &str) -> Option<u64> {
     let fft_string = "fft".to_owned();
     let dac_string = "dac".to_owned();
 
-    get_graph_routes(parse_input(input), "svr").map(|paths| {
-        paths
-            .iter()
+    Some(
+        get_graph_routes(&parse_input(input), &"svr".to_string())
+            .into_iter()
             .filter(|path| path.contains(&fft_string) && path.contains(&dac_string))
-            .count() as u64
-    })
+            .count() as u64,
+    )
 }
 
 const EXAMPLE_2: &str = "svr: aaa bbb
